@@ -3,18 +3,17 @@ package Service
 import (
 	"net/http"
 	"fmt"
-	"github.com/op/go-logging"
-	"github.com/xeipuuv/gojsonschema"
 	"io/ioutil"
 	"encoding/json"
 	"regexp"
 	"sync"
 	"strconv"
+
+	"github.com/op/go-logging"
 )
 
 var (
 	log = logging.MustGetLogger("service")
-	schemaLoader = gojsonschema.NewReferenceLoader("file:///./Schema.json")
 )
 
 type Server struct {
@@ -31,7 +30,7 @@ type Item struct {
 }
 
 type Meta struct {
-	Status        int64    `json:"status"`
+	Status        int64  `json:"status"`
 	ContentType   string `json:"content-type"`
 	ContentLength int64  `json:"content-length"`
 }
@@ -69,76 +68,84 @@ func ArrayUrl(w http.ResponseWriter, r *http.Request) {
 
 		items := make(chan interface{}, len(urls))
 
-		go func() {
-			wg := sync.WaitGroup{}
-			for _, url := range urls {
-				wg.Add(1)
-				go func() {
-					res, err := http.Get(url)
-					defer res.Body.Close()
-					if err != nil {
-						log.Errorf("Can't GET from url: %s \nerr: %s", url, err)
-					}
-					status, err := strconv.ParseInt(res.Status, 10, 32)
-					meta := Meta{
-						Status:        status,
-						ContentType:   res.Header.Get("content-type"),
-						ContentLength: res.ContentLength,
-					}
-
-					body, err := ioutil.ReadAll(res.Body)
-					if err != nil {
-						log.Errorf("Can't read body from url {}", url)
-					}
-					tags := countTag(string(body))
-
-					elements := []Element{}
-					for k, v := range tags {
-						elements = append(elements, Element{Tag: k, Count: v})
-					}
-
-					item := Item{
-						Url:      url,
-						Meta:     meta,
-						Elements: elements,
-					}
-					items <- item
-					defer wg.Done()
-				}()
-			}
-			wg.Wait()
-			defer close(items)
-		}()
+		go ParseUrl(urls, items)
 
 		resp := toSlice(items)
 
-		jsonItems, _ := json.Marshal(resp)
-
-		document := gojsonschema.NewReferenceLoader(string(jsonItems))
-		result, err := gojsonschema.Validate(schemaLoader, document)
+		jsonItems, err := json.Marshal(resp)
 		if err != nil {
-			log.Errorf("Error in process validation")
-		}
-
-		if !result.Valid(){
-			log.Errorf("Invalid JSON document")
+			log.Errorf("Can't marshal array Items: %s", resp)
 		}
 
 		status, err := w.Write(jsonItems)
 		if err != nil {
 			log.Errorf("Can't send response %s \nstatus %d, err: %s", items, status, err)
-		}
-		log.Infof("Status: %d", status)
+			w.WriteHeader(http.StatusInternalServerError)
+		}else{
+			log.Infof("Status: %d", status)
 
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+		}
+
 
 	default:
 		log.Infof("Sorry, only GET and POST methods are supported.")
 	}
 }
 
-func countTag(body string) map[string]int64 {
+func ParseUrl(urls []string, items chan interface{}) {
+	wg := sync.WaitGroup{}
+	for _, url := range urls {
+		reg, _ := regexp.Compile("^(https?://)?([\\w.]+)\\.([a-z]{2,6}\\.?)(/[\\w.]*)*/?$")
+		if !reg.MatchString(url) {
+			log.Errorf("Invalid URL: %s", url)
+			continue
+		}
+
+		wg.Add(1)
+		go func() {
+			items <- BuildItem(url)
+			defer wg.Done()
+		}()
+	}
+	wg.Wait()
+	defer close(items)
+}
+
+func BuildItem(url string) Item {
+	res, err := http.Get(url)
+	defer res.Body.Close()
+	if err != nil {
+		log.Errorf("Can't GET from url: %s \nerr: %s", url, err)
+	}
+	status, err := strconv.ParseInt(res.Status, 10, 32)
+	meta := Meta{
+		Status:        status,
+		ContentType:   res.Header.Get("content-type"),
+		ContentLength: res.ContentLength,
+	}
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		log.Errorf("Can't read body from url {}", url)
+	}
+	tags := CountTag(string(body))
+
+	elements := []Element{}
+	for k, v := range tags {
+		elements = append(elements, Element{Tag: k, Count: v})
+	}
+
+	item := Item{
+		Url:      url,
+		Meta:     meta,
+		Elements: elements,
+	}
+	return item
+}
+
+func CountTag(body string) map[string]int64 {
 	result := map[string]int64{}
 	regex := regexp.MustCompile("<([^>/ ]+)")
 	tags := regex.FindAllString(body, -1)
