@@ -6,7 +6,12 @@ import (
 
 func TestCountTag(t *testing.T) {
 	string := "<html><tag1></tag1><tag2/></html>"
-	result := CountTag(string)
+	result, length := CountTag(string)
+
+	if length != 33 {
+		t.Fatalf("Invalid contentLength %d", length)
+	}
+
 	if result["html"] > 1 && result["html"] < 0 {
 		t.Fatalf("Tag 'html' should be one")
 	}

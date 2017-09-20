@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sync"
 	"strconv"
+	"strings"
 
 	"github.com/op/go-logging"
 )
@@ -81,13 +82,12 @@ func ArrayUrl(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Errorf("Can't send response %s \nstatus %d, err: %s", items, status, err)
 			w.WriteHeader(http.StatusInternalServerError)
-		}else{
+		} else {
 			log.Infof("Status: %d", status)
 
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
 		}
-
 
 	default:
 		log.Infof("Sorry, only GET and POST methods are supported.")
@@ -97,7 +97,7 @@ func ArrayUrl(w http.ResponseWriter, r *http.Request) {
 func ParseUrl(urls []string, items chan interface{}) {
 	wg := sync.WaitGroup{}
 	for _, url := range urls {
-		reg, _ := regexp.Compile("^(https?://)?([\\w.]+)\\.([a-z]{2,6}\\.?)(/[\\w.]*)*/?$")
+		reg, _ := regexp.Compile("^(https?://)?([\\w.]+)\\.([a-z]{2,6}\\.?)(/[\\w.]*)*[/a-z-\\d]*/?$")
 		if !reg.MatchString(url) {
 			log.Errorf("Invalid URL: %s", url)
 			continue
@@ -119,18 +119,28 @@ func BuildItem(url string) Item {
 	if err != nil {
 		log.Errorf("Can't GET from url: %s \nerr: %s", url, err)
 	}
-	status, err := strconv.ParseInt(res.Status, 10, 32)
+	status, err := strconv.ParseInt(strings.Split(res.Status, " ")[0], 10, 32)
+	contentType := strings.Split(res.Header.Get("content-type"), ";")[0]
+	contentLength := res.ContentLength
 	meta := Meta{
-		Status:        status,
-		ContentType:   res.Header.Get("content-type"),
-		ContentLength: res.ContentLength,
+		Status: status,
+	}
+	if len(contentType) != 0 {
+		meta.ContentType = contentType
+	}
+	if contentLength > 0 {
+		meta.ContentLength = contentLength
 	}
 
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		log.Errorf("Can't read body from url {}", url)
 	}
-	tags := CountTag(string(body))
+	tags, length := CountTag(string(body))
+
+	if meta.ContentLength < 1{
+		meta.ContentLength = length
+	}
 
 	elements := []Element{}
 	for k, v := range tags {
@@ -145,7 +155,7 @@ func BuildItem(url string) Item {
 	return item
 }
 
-func CountTag(body string) map[string]int64 {
+func CountTag(body string) (map[string]int64, int64) {
 	result := map[string]int64{}
 	regex := regexp.MustCompile("<([^>/ ]+)")
 	tags := regex.FindAllString(body, -1)
@@ -157,7 +167,7 @@ func CountTag(body string) map[string]int64 {
 		}
 		result[tagName] += 1
 	}
-	return result
+	return result, int64(len(body))
 }
 
 func toSlice(c chan interface{}) []interface{} {
