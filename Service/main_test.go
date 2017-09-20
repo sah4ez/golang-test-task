@@ -2,11 +2,12 @@ package Service
 
 import (
 	"testing"
+	"strings"
 )
 
 func TestCountTag(t *testing.T) {
 	string := "<html><tag1></tag1><tag2/></html>"
-	result, length := CountTag(string)
+	result, length := CountTag(strings.NewReader(string))
 
 	if length != 33 {
 		t.Fatalf("Invalid contentLength %d", length)
