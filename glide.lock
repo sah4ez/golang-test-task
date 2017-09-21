@@ -1,6 +1,11 @@
-hash: 9957bc5e0a2a191bafd0d2fa3831ea7f16f0eb79728214ea66de5b832691294b
-updated: 2017-09-21T10:04:33.953858767+03:00
+hash: 2f8307cc21f829c6e538bb3de66b541f9da7ff7b4f6e7ca7a074d50a0f874016
+updated: 2017-09-21T10:29:10.555851114+03:00
 imports:
 - name: github.com/op/go-logging
   version: 970db520ece77730c7e4724c61121037378659d9
+- name: golang.org/x/net
+  version: b60f3a92103dfd93dfcb900ec77c6d0643510868
+  subpackages:
+  - html
+  - html/atom
 testImports: []
