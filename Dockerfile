@@ -11,5 +11,5 @@ COPY . /go/src/github.com/sah4ez/golang-test-task
 
 RUN mkdir -p /go/bin && go build -o /go/bin/gotest && chmod +x /go/bin/gotest 
 
-ENTRYPOINT ["/go/bin/gotest", "localhost", "9990"]
+ENTRYPOINT ["/go/bin/gotest", "127.0.0.1", "9990"]
 EXPOSE 9990
