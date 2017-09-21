@@ -72,7 +72,7 @@ func ArrayUrl(w http.ResponseWriter, r *http.Request) {
 func ParseUrl(urls []string, items chan *Item) {
 	wg := sync.WaitGroup{}
 	for _, url := range urls {
-		reg, _ := regexp.Compile("^(https?://)?([\\w.]+)\\.([a-z]{2,6}\\.?)(/[\\w.]*)*[/a-z-\\d]*/?$")
+		reg, _ := regexp.Compile("^http(s?)://([\\w.]+)\\.([a-z]{2,6}\\.?)(/[\\w.]*)*[/a-z-\\d]*/?$")
 		if !reg.MatchString(url) {
 			log.Errorf("Invalid URL: %s", url)
 			continue

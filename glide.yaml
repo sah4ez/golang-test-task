@@ -1,0 +1,3 @@
+package: github.com/sah4ez/golang-test-task
+import:
+- package: github.com/op/go-logging
