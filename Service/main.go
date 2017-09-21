@@ -20,20 +20,17 @@ var (
 )
 
 func (s Server) Listen() {
-	addr := fmt.Sprintf("%s:%s", s.Host, s.Port)
-	log.Infof("2Start Listen %s", addr)
 	http.HandleFunc("/", ArrayUrl)
-	log.Infof("1Start Listen %s", addr)
 	http.ListenAndServe(":9990", nil)
-	log.Infof("Start Listen %s", addr)
 }
 
 func ArrayUrl(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
-                log.Infof("POST")
 		defer r.Body.Close()
 		bytes, err := ioutil.ReadAll(r.Body)
+		log.Infof("POST %s", string(bytes))
+
 		if err != nil {
 			fmt.Fprintf(w, "Can't read bytes. err: %v", err)
 			return

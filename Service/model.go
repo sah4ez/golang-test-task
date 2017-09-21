@@ -1,8 +1,6 @@
 package Service
 
 type Server struct {
-	Host string
-	Port string
 }
 
 type urls []string
