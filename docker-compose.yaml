@@ -1,0 +1,6 @@
+version: '3.2'
+services:
+  web:
+    image: gotest
+    ports:
+     - "9990:9990"

@@ -11,49 +11,27 @@ import (
 	"strings"
 
 	"github.com/op/go-logging"
+	"golang.org/x/net/html"
+	"io"
 )
 
 var (
 	log = logging.MustGetLogger("service")
 )
 
-type Server struct {
-	Host string
-	Port string
-}
-
-type urls []string
-
-type Item struct {
-	Url      string    `json:"url"`
-	Meta     Meta      `json:"meta"`
-	Elements []Element `json:"elements"`
-}
-
-type Meta struct {
-	Status        int64  `json:"status"`
-	ContentType   string `json:"content-type"`
-	ContentLength int64  `json:"content-length"`
-}
-
-type Element struct {
-	Tag   string `json:"tag-name"`
-	Count int64  `json:"count"`
-}
-
 func (s Server) Listen() {
 	addr := fmt.Sprintf("%s:%s", s.Host, s.Port)
-	log.Infof("Start Listen %s", addr)
+	log.Infof("2Start Listen %s", addr)
 	http.HandleFunc("/", ArrayUrl)
-	http.ListenAndServe(addr, nil)
+	log.Infof("1Start Listen %s", addr)
+	http.ListenAndServe(":9990", nil)
+	log.Infof("Start Listen %s", addr)
 }
 
 func ArrayUrl(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
-	case "GET":
-		log.Infof("GET")
 	case "POST":
-		log.Infof("POST")
+                log.Infof("POST")
 		defer r.Body.Close()
 		bytes, err := ioutil.ReadAll(r.Body)
 		if err != nil {
@@ -67,7 +45,7 @@ func ArrayUrl(w http.ResponseWriter, r *http.Request) {
 			log.Errorf("Can't unmarshal data. err: %s", err)
 		}
 
-		items := make(chan interface{}, len(urls))
+		items := make(chan *Item, len(urls))
 
 		go ParseUrl(urls, items)
 
@@ -94,10 +72,10 @@ func ArrayUrl(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func ParseUrl(urls []string, items chan interface{}) {
+func ParseUrl(urls []string, items chan *Item) {
 	wg := sync.WaitGroup{}
 	for _, url := range urls {
-		reg, _ := regexp.Compile("^(https?://)?([\\w.]+)\\.([a-z]{2,6}\\.?)(/[\\w.]*)*[/a-z-\\d]*/?$")
+		reg, _ := regexp.Compile("^http(s?)://([\\w.]+)\\.([a-z]{2,6}\\.?)(/[\\w.]*)*[/a-z-\\d]*/?$")
 		if !reg.MatchString(url) {
 			log.Errorf("Invalid URL: %s", url)
 			continue
@@ -113,7 +91,7 @@ func ParseUrl(urls []string, items chan interface{}) {
 	defer close(items)
 }
 
-func BuildItem(url string) Item {
+func BuildItem(url string) *Item {
 	res, err := http.Get(url)
 	defer res.Body.Close()
 	if err != nil {
@@ -132,13 +110,9 @@ func BuildItem(url string) Item {
 		meta.ContentLength = contentLength
 	}
 
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		log.Errorf("Can't read body from url {}", url)
-	}
-	tags, length := CountTag(string(body))
+	tags, length := CountTag(res.Body)
 
-	if meta.ContentLength < 1{
+	if meta.ContentLength < 1 {
 		meta.ContentLength = length
 	}
 
@@ -152,26 +126,34 @@ func BuildItem(url string) Item {
 		Meta:     meta,
 		Elements: elements,
 	}
-	return item
+	return &item
 }
 
-func CountTag(body string) (map[string]int64, int64) {
+func CountTag(body io.Reader) (map[string]int64, int64) {
 	result := map[string]int64{}
-	regex := regexp.MustCompile("<([^>/ ]+)")
-	tags := regex.FindAllString(body, -1)
-	for _, tag := range tags {
-		tagName := tag[1:]
-		if _, ok := result[tagName]; !ok {
-			result[tagName] = 1
-			continue
+	tok:=html.NewTokenizer(body)
+	for {
+		tt := tok.Next()
+		if tt == html.ErrorToken {
+			return result, 0
 		}
-		result[tagName] += 1
+		if tt == html.StartTagToken || tt == html.SelfClosingTagToken{
+			t := tok.Token()
+			if _, ok := result[t.Data]; !ok {
+				result[t.Data] = 1
+				continue
+			}
+			result[t.Data] += 1
+		}
 	}
-	return result, int64(len(body))
+	bytes, _ := ioutil.ReadAll(body)
+	length := int64(len(bytes))
+
+	return result, length
 }
 
-func toSlice(c chan interface{}) []interface{} {
-	s := make([]interface{}, 0)
+func toSlice(c chan *Item) []*Item {
+	s := make([]*Item, 0)
 	for i := range c {
 		s = append(s, i)
 	}
